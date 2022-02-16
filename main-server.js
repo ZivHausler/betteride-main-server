@@ -19,7 +19,7 @@ app.listen(3001, async () => {
 });
 
 app.get('/', (req,res) => {
-res.response(200).send('hello world')
+res.send('gay porn')
 })
 
 app.get('/api/getUserDirections', async (req, res) => {
