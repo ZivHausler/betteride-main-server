@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=default"></script>
+    <link rel="stylesheet" type="text/css" href="./style.css" />
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=default"></script>
+    <script src="./maps.js"></script>
+    <!-- <script src="http://google-maps-utility-library-v3.googlecode.com/svn/trunk/infobubble/src/infobubble.js"></script> -->
+
+     <!-- The core Firebase JS SDK is always required and must be listed first -->
+     <script src="https://www.gstatic.com/firebasejs/7.14.6/firebase-app.js"></script>
+
+     <!-- TODO: Add SDKs for Firebase products that you want to use
+          https://firebase.google.com/docs/web/setup#available-libraries -->
+ 
+     <script src="https://www.gstatic.com/firebasejs/7.14.6/firebase-analytics.js"></script>
+ 
+     <!--**** Remember to add the database script ***-->
+     <script src="https://www.gstatic.com/firebasejs/7.14.6/firebase-database.js"></script>
+ 
+     <!--Your web app's Firebase configuration-->
+     <script src="config.js"></script>
+     <script src="demoVehicles.js"></script>
+     <script src="cars.js"></script>
+ 
+    <title>Betteride</title>
+</head>
+
+<body>
+    <div id="map">
+    </div>
+    <button id="addCars" onclick="addCar()">Add Car</button>
+    <div id="buttonsDiv">
+        <button id="findRide" onclick="findRide(true)">Order a ride</button>  
+        <div id="orderInputsButtonsDiv">
+            <div id="addressInputsDiv">
+                <input id="originAddressInput" value="Ruppin Academic Center" placeholder="Origin address" type="text">
+                <img id="changeDirections" onclick="switchDirections()" src="/noun_exchange_185720.png" alt="">
+                <input id="destinationAddressInput" value="Tel Aviv" placeholder="Destination address" type="text">
+            </div>
+            <div id="orderCancelDiv">
+                <!-- <button onclick="getNearestVehicles({ lat: 32.342333, lng: 34.911375 }, { lat: 32.153313, lng: 34.842933 }, 5)">Order</button> -->
+                <button onclick="getNearestVehicles()">Order</button>
+                <button onclick="findRide(false)">Cancel</button>
+            </div>
+        </div>  
+    </div>
+</body>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBtkYYiYwj9E4UyexOOebzUsxZgWDbJKvc&callback=initMap&v=weekly" async></script>
+</html>

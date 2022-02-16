@@ -1,0 +1,117 @@
+*{
+    margin: 0;
+    padding: 0;
+    outline: none;
+    box-sizing: border-box;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+/* Always set the map height explicitly to define the size of the div
+       * element that contains the map. */
+
+#map {
+    width: 100%;
+    height: 100%;
+}
+
+/* Optional: Makes the sample page fill the window. */
+
+html,
+body {
+    position: relative;
+    height: 100vh;
+}
+
+#changeDirections{
+    padding: 5px;
+    background-color: white;
+    border: 2px solid rgb(115, 185, 255);
+    height: 45px;
+    width: 45px;
+    border-radius: 50%;
+    box-shadow: 0px 0px 5px rgba(0, 0, 0, 0.9);
+    transition: all 0.5s ease-in-out;
+    pointer-events: all;
+    cursor: pointer;
+}
+#changeDirections:hover{
+    transform: rotate(180deg);
+}
+
+#buttonsDiv {
+    position: absolute;
+    background-color: transparent;
+    bottom: 0;
+    height: 70px;
+    width: 100%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
+
+button, #buttonsDiv input{
+    padding: 5px 10px;
+    margin: 5px;
+    border-radius: 15px;
+    height: 40px;
+    width: 120px;
+    outline: none;
+    border: 2px solid rgb(115, 185, 255);
+    box-shadow: 0px 0px 5px rgba(0, 0, 0, 0.7);
+    background-color: rgb(255, 255, 255);
+    cursor: pointer;
+    pointer-events: all;
+}
+
+#orderInputsButtonsDiv{
+    display: none;
+    flex-direction: column;
+    align-items:center;
+    justify-content: center;
+}
+#addressInputsDiv, #orderCancelDiv{
+    width: 100%;
+    display: flex;
+    justify-content: space-evenly;
+}
+
+#findRide{
+    display: block;
+}
+
+#buttonsDiv input{
+    width: 200px;
+    text-align: center;
+}
+
+.gm-style .gm-style-iw-c{
+    padding: -10px;
+    margin: 0;
+}
+
+.gm-style .gm-style-iw-d {
+    text-align: center;
+    padding-left: 30px;
+}
+
+.gm-style .gm-style-iw-d p{
+    margin: 5px;
+}
+
+/* .gm-ui-hover-effect{
+    display: none;
+} */
+
+#addCars{
+    position: absolute;
+    top: 2%;
+    left: 2%;
+}
+
+#saveCar, #removeThisCar{
+    width: 60px;
+}
