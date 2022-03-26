@@ -1,12 +1,9 @@
 // import { GOOGLE_MAPS_APIKEY } from '@env';
 const express = require("express");
 const fetch = require("node-fetch");
-const fs = require("fs");
 const app = express();
 const cors = require("cors");
 const axios = require("axios");
-const { response } = require("express");
-const { dir } = require("console");
 const googleMapsKey = "AIzaSyB9mAs9XA7wtN9RdKMKRig7wlHBfUtjt1g";
 const distance = require("google-distance-matrix");
 const munkres = require("munkres-js");
@@ -15,29 +12,27 @@ const IP_ADDRESS = "https://betteride-firebase-server-3mmcqmln7a-ew.a.run.app/";
 app.use(cors({ origin: true }));
 
 app.listen(3001, async () => {
+  sendLog("General-Server is up and running","OK")
   console.log("Waiting for a request...");
 });
-
-app.get('/', (req,res) => {
-res.send('Game on!')
+app.get('/', (req, res) => {
+  res.send('Game on!')
 })
-
 app.get('/api/getUserDirections', async (req, res) => {
   const { origin, destination } = req.query;
   res.status(200).send(await getDirectionsByAddress(origin, destination));
 });
-
 app.get('/api/translateCordsToAddress', async (req, res) => {
   const { lat, lng } = req.query;
   res.status(200).send(JSON.stringify(await translateCordsToAddress(lat, lng)));
 })
-
 app.get("/api/OrderVehicle", async (req, res) => {
   const { userOrigin, userDestination, userID } = req.query;
   // find the nearest vehicle and assign it to the user
   const vehiclePlateNumber = await naiveAssignmentVehicleToUser(userOrigin, userDestination, userID)
   if (vehiclePlateNumber === -1) {
     console.log("exited with status 404")
+    sendLog("OrderVehicle, there are no available vehicles","ERROR")
     res.status(404).send('nothing works here');
   }
   else {
@@ -47,7 +42,6 @@ app.get("/api/OrderVehicle", async (req, res) => {
     res.status(200).send(JSON.stringify(vehiclePlateNumber));
   }
 });
-
 app.put('/api/generateRouteToVehicle', async (req, res) => {
   const { userID } = req.query;
   try {
@@ -72,6 +66,7 @@ app.put('/api/generateRouteToVehicle', async (req, res) => {
       },
       body: JSON.stringify({ plateNumber: origin_destination.state.assigned, userID, state: "TOGETHER" })
     });
+    sendLog("UserID: " + userID + " is in vehicle: " + origin_destination.state.assigned + ", and currently driving to destination","OK")
     res.status(200).send(JSON.stringify({
       origin: {
         description: route.start_address,
@@ -85,6 +80,7 @@ app.put('/api/generateRouteToVehicle', async (req, res) => {
   }
 
   catch (e) {
+    sendLog("Somthing went wrong trying pushing route to vehicle: " + origin_destination.state.assigned + " to user-id: " + userID,"ERROR")
     console.log(e)
     res.status(400).send("ERROR")
   }
@@ -176,7 +172,6 @@ const optimizedAssignedVehicles = async (distanceMatrix, vehicleIDs, usersIDs, d
     })
   }
 };
-
 const initiateMatrix = (vehiclesLength, usersLength) => {
   return Array.from(
     {
@@ -198,8 +193,6 @@ const getDirectionsByAddress = async (from, to) => {
     })
     .catch((error) => console.log(error));
 };
-
-
 const sortedVehicleArray = (nearestVehicles) => {
   // Create items array
   let sortedArray = Object.keys(nearestVehicles).map(function (key) {
@@ -323,7 +316,6 @@ const getTotalDrivingTimeToUser = async () => {
   let response = await fetch(`${IP_ADDRESS}getTotalDrivingTimeToUser`)
   return await response.json();
 }
-
 const translateCordsToAddress = async (lat, lng) => {
   return await axios
     .get(
@@ -334,4 +326,13 @@ const translateCordsToAddress = async (lat, lng) => {
     })
     .catch((error) => console.log('error'));
 
+}
+const sendLog = async (text, type) => {
+  await fetch(`${IP_ADDRESS}postLog`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ text, type, server: "general-server" })
+  });
 }
