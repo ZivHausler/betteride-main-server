@@ -10,9 +10,8 @@ const munkres = require("munkres-js");
 const IP_ADDRESS = "http://10.100.102.233:3001"; // Daniel -> 10.100.102.233 // ZIV-> 10.0.0.40 // https://betteride-main-server-3mmcqmln7a-ew.a.run.app/
 
 app.use(cors({ origin: true }));
-
 app.listen(3002, async () => {
-  sendLog("General-Server is up and running","OK")
+  sendLog("General-Server is up and running", "OK")
   console.log("Waiting for a request...");
 });
 app.get('/', (req, res) => {
@@ -27,25 +26,27 @@ app.get('/api/translateCordsToAddress', async (req, res) => {
   res.status(200).send(JSON.stringify(await translateCordsToAddress(lat, lng)));
 })
 app.get("/api/OrderVehicle", async (req, res) => {
+  console.log(req.query);
   const { userOrigin, userDestination, userID } = req.query;
   console.log("OrderVehicle", userOrigin)
   // find the nearest vehicle and assign it to the user
   const vehiclePlateNumber = await naiveAssignmentVehicleToUser(userOrigin, userDestination, userID)
+  res.send(JSON.stringify(vehiclePlateNumber))
   if (vehiclePlateNumber === -1) {
     console.log("exited with status 404")
-    sendLog("OrderVehicle, there are no available vehicles","ERROR")
-    res.status(404).send('nothing works here');
+    sendLog("OrderVehicle, there are no available vehicles", "ERROR")
+    res.status(404).send('OrderVehicle, there are no available vehicles","ERROR');
   }
   else {
     // collect all vehicles which currently on the way to users
     // and create a costMatrix out of it
-    await createCostMatrix();
+    // await createCostMatrix();
     res.status(200).send(JSON.stringify(vehiclePlateNumber));
   }
 });
 app.put('/api/generateRouteToVehicle', async (req, res) => {
   const { userID } = req.query;
-  console.log("generateRouteToVehicle, user id -> " , userID)
+  console.log("generateRouteToVehicle, user id -> ", userID)
   try {
     // get the desired user origin and destination (from the firebase server)
     const userDirections = await fetch(`${IP_ADDRESS}/getUserDirections?userID=${userID}`)
@@ -68,7 +69,7 @@ app.put('/api/generateRouteToVehicle', async (req, res) => {
       },
       body: JSON.stringify({ plateNumber: origin_destination.state.assigned, userID, state: "TOGETHER" })
     });
-    sendLog("UserID: " + userID + " is in vehicle: " + origin_destination.state.assigned + ", and currently driving to destination","OK")
+    sendLog("UserID: " + userID + " is in vehicle: " + origin_destination.state.assigned + ", and currently driving to destination", "OK")
     res.status(200).send(JSON.stringify({
       origin: {
         description: route.start_address,
@@ -82,99 +83,14 @@ app.put('/api/generateRouteToVehicle', async (req, res) => {
   }
 
   catch (e) {
-    sendLog("Somthing went wrong trying pushing route to vehicle: " + origin_destination.state.assigned + " to user-id: " + userID,"ERROR")
+    sendLog("Somthing went wrong trying pushing route to vehicle: " + origin_destination.state.assigned + " to user-id: " + userID, "ERROR")
     console.log(e)
     res.status(400).send("ERROR")
   }
 });
 
+
 // methods
-const createCostMatrix = async () => {
-  const response = await fetch(`${IP_ADDRESS}/getVehiclesTowardsUsers`);
-  const responseData = await response.json();
-  console.log(responseData);
-  if (responseData.length <= 0) return;
-  const origins = [];
-  const destinations = [];
-  const vehiclesIDs = [];
-  const usersIDs = [];
-  distance.key('AIzaSyAYOZJcrH22i5ePgb4ctAUPsQw9oU69MwU');
-
-  let count = 0;
-  let mishtatfimMatrix = [];
-  responseData.forEach((vehicle) => {
-    origins.push(vehicle.currentLocation?.location?.lat + "," + vehicle.currentLocation.location.lng);
-    destinations.push(vehicle.route.end_location.lat + "," + vehicle.route.end_location.lng);
-    vehiclesIDs.push(vehicle.plateNumber);
-    usersIDs.push(count++);
-  });
-  if (usersIDs.length <= 1) {
-    //console.log("not enough vehicles to optimize")
-    return;
-  }
-
-  distance.matrix(origins, destinations, (err, distances) => {
-    const distanceMatrix = initiateMatrix(vehiclesIDs.length, usersIDs.length);
-    if (err) {
-      return console.log(err);
-    }
-    if (!distances) {
-      return console.log("no distances");
-    }
-    if (distances.status == "OK") {
-      mishtatfimMatrix = initiateMatrix(
-        vehiclesIDs.length,
-        usersIDs.length
-      );
-      for (let i = 0; i < origins.length; i++) {
-        for (let j = 0; j < destinations.length; j++) {
-          if (distances.rows[0].elements[j].status == "OK") {
-            distanceMatrix[i][j] = (distances.rows[i].elements[j].duration.value / 60).toFixed(2);
-            mishtatfimMatrix[i][j] = 'vehicle plate number: ' + vehiclesIDs[i] + " to location: " + destinations[j] + " will last: " + (distances.rows[i].elements[j].duration.value / 60).toFixed(2) + ' minutes';
-          }
-          else console.log(destination + " is not reachable from " + origin);
-        }
-      }
-    }
-    optimizedAssignedVehicles(distanceMatrix, vehiclesIDs, usersIDs, destinations, mishtatfimMatrix);
-    // return distanceMatrix;
-  });
-};
-const optimizedAssignedVehicles = async (distanceMatrix, vehicleIDs, usersIDs, destinations, mishtatfimMatrix) => {
-  let unoptimizedTotalDrivingTimeToUser = (await getTotalDrivingTimeToUser() / 60);
-  unoptimizedTotalDrivingTimeToUser = unoptimizedTotalDrivingTimeToUser.toFixed(2);
-  console.log("\nTotal driving time before optimization is: " + unoptimizedTotalDrivingTimeToUser + ' minutes,');
-  console.log('when the current distribution looks like:');
-
-  mishtatfimMatrix.forEach((mishtatef, index) => console.log(mishtatef[index]));
-  console.log('');
-  console.log('Full distance matrix (by minutes): ', distanceMatrix);
-  // get the optimized routes by the Hungarian Algorithm
-  const optimizedRoutes = munkres(distanceMatrix);
-  console.log("In order to optimize the routes, consider the following distribution: ", optimizedRoutes);
-  console.log('');
-  // calculate total optimize time:
-  let optimizedTotalDrivingTimeToUser = 0;
-  optimizedRoutes.forEach(route => optimizedTotalDrivingTimeToUser += parseInt(distanceMatrix[route[0]][route[1]]));
-  console.log("Total driving time after optimization is: " + optimizedTotalDrivingTimeToUser + ' minutes,')
-  console.log('when the new distribution will be:');
-  mishtatfimMatrix.forEach((mishtatef, index) => console.log(mishtatef[optimizedRoutes[index][1]]));
-
-  optimizedRoutes.forEach(route => {
-    route[0] = vehicleIDs[route[0]];
-    route[1] = destinations[route[1]];
-  })
-
-  if (await getTotalDrivingTimeToUser() > optimizedTotalDrivingTimeToUser) {
-    await fetch(`${IP_ADDRESS}/reassignVehiclesToUsers`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(optimizedRoutes),
-    })
-  }
-};
 const initiateMatrix = (vehiclesLength, usersLength) => {
   return Array.from(
     {
@@ -255,66 +171,168 @@ const replaceMaxKey = (dict, value, newKey) => {
   }
   return dict;
 };
+
+
+const optimizedAssignedVehicles = async (distanceMatrix, vehicleIDs, usersIDs) => {
+  let unoptimizedTotalDrivingTimeToUser = (await getTotalDrivingTimeToUser() / 60);
+  unoptimizedTotalDrivingTimeToUser = unoptimizedTotalDrivingTimeToUser.toFixed(2);
+  console.log("\nTotal driving time before optimization is: " + unoptimizedTotalDrivingTimeToUser + ' minutes,');
+  console.log('when the current distribution looks like:');
+
+  // mishtatfimMatrix.forEach((mishtatef, index) => console.log(mishtatef[index]));
+
+  console.log('\nFull distance matrix (by minutes): ', distanceMatrix);
+  // get the optimized routes by the Hungarian Algorithm
+  const optimizedRoutes = munkres(distanceMatrix);
+  console.log("\nIn order to optimize the routes, consider the following distribution: ", optimizedRoutes);
+  // calculate total optimize time:
+  let optimizedTotalDrivingTimeToUser = 0;
+  optimizedRoutes.forEach(route => optimizedTotalDrivingTimeToUser += parseInt(distanceMatrix[route[0]][route[1]]));
+  console.log("Total driving time after optimization is: " + optimizedTotalDrivingTimeToUser + ' minutes,')
+  console.log('when the new distribution will be:');
+
+  // mishtatfimMatrix.forEach((mishtatef, index) => console.log(mishtatef[optimizedRoutes[index][1]]));
+
+  // optimizedRoutes.forEach(route => {
+  //   route[0] = vehicleIDs[route[0]];
+  //   route[1] = destinations[route[1]];
+  // })
+
+  if (unoptimizedTotalDrivingTimeToUser > optimizedTotalDrivingTimeToUser) {
+    await fetch(`${IP_ADDRESS}/reassignVehiclesToUsers`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(optimizedRoutes),
+    })
+  }
+};
+
+
 // This method is responsible for assigning user to the nearest (by time) vehicle
 // @param userOrigin
 // @param userDestination
 // the method recives user origin and destination, calc its route and returns the assigned vehicle
 const naiveAssignmentVehicleToUser = async (userOrigin, userDestination, userID) => {
-  const userRoute = await getDirectionsByAddress(userOrigin, userDestination);
-  const userOriginCoordinates = userRoute.start_location;
-  const vehiclesResponse = await fetch(`${IP_ADDRESS}/getVehicles`);
-  const vehicles = await vehiclesResponse.json();
-  let nearestVehicles = {};
 
-  // loop through all vehicles and output n nearest vehicles
-  for (const [key, value] of Object.entries(vehicles)) {
-    let dist = Math.sqrt(Math.pow(userOriginCoordinates.lat - value.currentLocation.location.lat, 2) + Math.pow(userOriginCoordinates.lng - value.currentLocation.location.lng, 2));
-    if (Object.keys(nearestVehicles).length < 3) {
-      // the vehicle is available
-      if (!value?.routeToUser && !value?.routeWithUser) {
-        nearestVehicles[dist] = value;
-      }
-    } else nearestVehicles = replaceMaxKey(nearestVehicles, value, dist);
-  }
-  if (Object.keys(nearestVehicles).length <= 0) {
-    console.log("there are no available cars for the ride");
-    return -1;
-  }
-  // replace distance with estimated arrival time
-  nearestVehicles = await replaceDistWithETA(
-    nearestVehicles,
-    userOriginCoordinates
-  );
-  // the row commented below, checks if there is a better vehicle, which its ride ends near the user origin.
-  // nearestVehicles = await calculateUnavailableCars(vehicles, nearestVehicles, userOriginCoordinates);
+  // get vehicles(available) and users (waiting for their vehicle to arrive) data
+  let response = await fetch(`${IP_ADDRESS}/getAllUsersWaitingForARide`);
+  const users = await response.json();
+  response = await fetch(`${IP_ADDRESS}/getVehiclesTowardsUsers`);
+  const vehicles = await response.json();
+ 
+  // get distance matrix by users(destinations) and vehicles(origins)
+  const distanceMatrix = await createDistanceMatrix(users, vehicles);
+  console.log("distanceMatrix:", distanceMatrix);
 
-  // sort the vehicles and return array from min to max
-  const sortedNearestVehicles = sortedVehicleArray(nearestVehicles);
-  // push route into the avialable vehicle
+  // send destance matrix to hungarian algorithm
+  // const optimized = optimizedAssignedVehicles(distanceMatrix, vehicles, users);
 
-  // if (!sortedNearestVehicles[0][1]){
-  //   console.log()
+  return distanceMatrix;
+  // calc which is the nearest (by time!) by sending both arrays to google matrix
+
+
+
+  // assign selected  vehicle to user
+
+
+  // const userRoute = await getDirectionsByAddress(userOrigin, userDestination);
+  // const userOriginCoordinates = userRoute.start_location;
+  // const vehiclesResponse = await fetch(`${IP_ADDRESS}/getVehicles`);
+  // const vehicles = await vehiclesResponse.json();
+  // let nearestVehicles = {};
+
+  // // loop through all vehicles and output n nearest vehicles
+  // for (const [key, value] of Object.entries(vehicles)) {
+  //   let dist = Math.sqrt(Math.pow(userOriginCoordinates.lat - value.currentLocation.location.lat, 2) + Math.pow(userOriginCoordinates.lng - value.currentLocation.location.lng, 2));
+  //   if (Object.keys(nearestVehicles).length < 3) {
+  //     // the vehicle is available
+  //     if (!value?.routeToUser && !value?.routeWithUser) {
+  //       nearestVehicles[dist] = value;
+  //     }
+  //   } else nearestVehicles = replaceMaxKey(nearestVehicles, value, dist);
   // }
+  // if (Object.keys(nearestVehicles).length <= 0) {
+  //   console.log("there are no available cars for the ride");
+  //   return -1;
+  // }
+  // // replace distance with estimated arrival time
+  // nearestVehicles = await replaceDistWithETA(nearestVehicles,userOriginCoordinates);
+  // // the row commented below, checks if there is a better vehicle, which its ride ends near the user origin.
+  // // nearestVehicles = await calculateUnavailableCars(vehicles, nearestVehicles, userOriginCoordinates);
 
-  // add to the desired vehicle the route to user destination from user origin
-  // sortedNearestVehicles[0][1].routeToUser.routes[0].legs[0]['trip_type'] = 'to_user';
-  sortedNearestVehicles[0][1].routeToUser['user_id'] = userID;
-  await fetch(`${IP_ADDRESS}/pushRouteToVehicle`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ plateNumber: sortedNearestVehicles[0][1].vehicle.plateNumber, route: sortedNearestVehicles[0][1].routeToUser, type: "TOWARDS_USER" })
-  });
-  await fetch(`${IP_ADDRESS}/pushTripLocationsToUser`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ userID, userOrigin, userDestination, vehiclePlateNumber: sortedNearestVehicles[0][1].vehicle.plateNumber })
-  });
-  return sortedNearestVehicles[0][1].vehicle.plateNumber;
+  // // sort the vehicles and return array from min to max
+  // const sortedNearestVehicles = sortedVehicleArray(nearestVehicles);
+  // // push route into the avialable vehicle
+
+  // // if (!sortedNearestVehicles[0][1]){
+  // //   console.log()
+  // // }
+
+  // // add to the desired vehicle the route to user destination from user origin
+  // // sortedNearestVehicles[0][1].routeToUser.routes[0].legs[0]['trip_type'] = 'to_user';
+  // sortedNearestVehicles[0][1].routeToUser['user_id'] = userID;
+
+
+  // await fetch(`${IP_ADDRESS}/pushRouteToVehicle`, {
+  //   method: "POST",
+  //   headers: {
+  //     "Content-Type": "application/json",
+  //   },
+  //   body: JSON.stringify({ plateNumber: sortedNearestVehicles[0][1].vehicle.plateNumber, route: sortedNearestVehicles[0][1].routeToUser, type: "TOWARDS_USER" })
+  // });
+  // await fetch(`${IP_ADDRESS}/pushTripLocationsToUser`, {
+  //   method: "POST",
+  //   headers: {
+  //     "Content-Type": "application/json",
+  //   },
+  //   body: JSON.stringify({ userID, userOrigin, userDestination, vehiclePlateNumber: sortedNearestVehicles[0][1].vehicle.plateNumber })
+  // });
+  // return sortedNearestVehicles[0][1].vehicle.plateNumber;
 };
+
+
+
+const createDistanceMatrix = (users, vehicles) => {
+  const origins = vehicles.map(vehicle => vehicle.currentLocation)
+  const destinations = users.map(user => user.currentLocation);
+  const distanceMatrix = initiateMatrix( destinations.length, origins.length);
+
+  distance.key('AIzaSyAEDK9co1lmhgQ2yyb6C0iko4HE7sXaK38');
+  
+  distance.matrix(origins, destinations, distanceMatrix, (err, distances) => {
+    if (err) {
+      sendLog(`createDistanceMatrix: Couldn't create a distance matrix`, 'ERROR')
+      return console.log(err);
+    }
+    if (!distances) {
+      return console.log("no distances");
+    }
+    if (distances.status == "OK") {
+      // mishtatfimMatrix = initiateMatrix(origins.length, destinations.length);
+      for (let i = 0; i < origins.length; i++) {
+        for (let j = 0; j < destinations.length; j++) {
+          if (distances.rows[0].elements[j].status == "OK") {
+            distanceMatrix[i][j] = (distances?.rows[i]?.elements[j]?.duration?.value / 60).toFixed(2);
+            // mishtatfimMatrix[i][j] = 'vehicle plate number: ' + vehiclesIDs[i] + " to location: " + destinations[j] + " will last: " + (distances.rows[i].elements[j].duration.value / 60).toFixed(2) + ' minutes';
+          }
+          else console.log("destination is not reachable from ");
+        }
+      }
+    }
+    else{
+      sendLog(`createDistanceMatrix: Couldn't create a distance matrix, maybe STATUS is wrong!`, 'ERROR')
+    }
+    console.log('inside matrix: ',distanceMatrix)
+  });
+
+  console.log('inside createDistanceMatrix function: ', distanceMatrix);
+  return distanceMatrix;
+}
+
+
+
 const getTotalDrivingTimeToUser = async () => {
   let response = await fetch(`${IP_ADDRESS}/getTotalDrivingTimeToUser`)
   return await response.json();
@@ -339,3 +357,60 @@ const sendLog = async (text, type) => {
     body: JSON.stringify({ text, type, server: "general-server" })
   });
 }
+
+
+
+
+
+// const createCostMatrix = async () => {
+//   const response = await fetch(`${IP_ADDRESS}/getVehiclesTowardsUsers`);
+//   const responseData = await response.json();
+//   console.log(responseData);
+//   if (responseData.length <= 0) return;
+//   const origins = [];
+//   const destinations = [];
+//   const vehiclesIDs = [];
+//   const usersIDs = [];
+
+//   distance.key('AIzaSyAYOZJcrH22i5ePgb4ctAUPsQw9oU69MwU');
+
+//   let count = 0;
+//   let mishtatfimMatrix = [];
+//   responseData.forEach((vehicle) => {
+//     origins.push(vehicle.currentLocation?.location?.lat + "," + vehicle.currentLocation.location.lng);
+//     destinations.push(vehicle.route.end_location.lat + "," + vehicle.route.end_location.lng);
+//     vehiclesIDs.push(vehicle.plateNumber);
+//     usersIDs.push(count++);
+//   });
+//   if (usersIDs.length <= 1) {
+//     //console.log("not enough vehicles to optimize")
+//     return;
+//   }
+
+//   distance.matrix(origins, destinations, (err, distances) => {
+//     const distanceMatrix = initiateMatrix(vehiclesIDs.length, usersIDs.length);
+//     if (err) {
+//       return console.log(err);
+//     }
+//     if (!distances) {
+//       return console.log("no distances");
+//     }
+//     if (distances.status == "OK") {
+//       mishtatfimMatrix = initiateMatrix(
+//         vehiclesIDs.length,
+//         usersIDs.length
+//       );
+//       for (let i = 0; i < origins.length; i++) {
+//         for (let j = 0; j < destinations.length; j++) {
+//           if (distances.rows[0].elements[j].status == "OK") {
+//             distanceMatrix[i][j] = (distances.rows[i].elements[j].duration.value / 60).toFixed(2);
+//             mishtatfimMatrix[i][j] = 'vehicle plate number: ' + vehiclesIDs[i] + " to location: " + destinations[j] + " will last: " + (distances.rows[i].elements[j].duration.value / 60).toFixed(2) + ' minutes';
+//           }
+//           else console.log("destination is not reachable from origin");
+//         }
+//       }
+//     }
+//     optimizedAssignedVehicles(distanceMatrix, vehiclesIDs, usersIDs, destinations, mishtatfimMatrix);
+//     // return distanceMatrix;
+//   });
+// };
