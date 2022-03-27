@@ -7,7 +7,7 @@ const axios = require("axios");
 const googleMapsKey = "AIzaSyB9mAs9XA7wtN9RdKMKRig7wlHBfUtjt1g";
 const distance = require("google-distance-matrix");
 const munkres = require("munkres-js");
-const IP_ADDRESS = "http://10.0.0.40:3001"; // Daniel -> 10.100.102.233 // ZIV-> 10.0.0.40 // https://betteride-main-server-3mmcqmln7a-ew.a.run.app/
+const IP_ADDRESS = "http://10.100.102.233:3001"; // Daniel -> 10.100.102.233 // ZIV-> 10.0.0.40 // https://betteride-main-server-3mmcqmln7a-ew.a.run.app/
 
 app.use(cors({ origin: true }));
 
@@ -28,6 +28,7 @@ app.get('/api/translateCordsToAddress', async (req, res) => {
 })
 app.get("/api/OrderVehicle", async (req, res) => {
   const { userOrigin, userDestination, userID } = req.query;
+  console.log("OrderVehicle", userOrigin)
   // find the nearest vehicle and assign it to the user
   const vehiclePlateNumber = await naiveAssignmentVehicleToUser(userOrigin, userDestination, userID)
   if (vehiclePlateNumber === -1) {
@@ -44,6 +45,7 @@ app.get("/api/OrderVehicle", async (req, res) => {
 });
 app.put('/api/generateRouteToVehicle', async (req, res) => {
   const { userID } = req.query;
+  console.log("generateRouteToVehicle, user id -> " , userID)
   try {
     // get the desired user origin and destination (from the firebase server)
     const userDirections = await fetch(`${IP_ADDRESS}/getUserDirections?userID=${userID}`)
