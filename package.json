@@ -9,7 +9,10 @@
     "google-distance-matrix": "^1.1.1",
     "munkres-js": "^1.2.2",
     "node-fetch": "^2.6.5",
-    "nodemon": "^2.0.14"
+    "nodemon": "^2.0.14",
+    "qs-google-signature": "^1.1.1",
+    "debug": "^2.1.0",
+    "request": "^2.36.0"
   },
   "name": "new",
   "version": "1.0.0",
