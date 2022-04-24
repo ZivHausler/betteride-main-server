@@ -7,7 +7,7 @@ const axios = require("axios");
 const googleMapsKey = "AIzaSyB9mAs9XA7wtN9RdKMKRig7wlHBfUtjt1g";
 // const distance = require("google-distance-matrix");
 const munkres = require("munkres-js");
-const IP_ADDRESS = "http://10.100.102.233:3001"; // Daniel -> 10.100.102.233 // ZIV-> 10.0.0.40 // https://betteride-main-server-3mmcqmln7a-ew.a.run.app/
+const IP_ADDRESS = "http://10.0.0.40:3001"; // Daniel -> 10.100.102.233 // ZIV-> 10.0.0.40 // https://betteride-main-server-3mmcqmln7a-ew.a.run.app/
 var distance = require('./distanceMatrix/index.js');
 let demoState = 0;
 
@@ -44,7 +44,7 @@ app.get("/api/OrderVehicle", async (req, res) => {
 
 app.put('/api/updateFinishedUsersAutomation', async (req, res) => {
   const { userID } = req.query;
-  console.log("userID" + userID + " has finished trip")
+  console.log("userID " + userID + " has finished trip")
   automatedActiveUsersIDs.push(userID);
   res.send("OK").status(200)
 });
@@ -229,12 +229,18 @@ const replaceMaxKey = (dict, value, newKey) => {
 
 
 const optimizedAssignedVehicles = async (distanceMatrix, vehicles, users) => {
+
+  // call a function that calculates the naive assignment total driving time
+  const naiveAssignTotalTime = await calculateTotalTimeOfNaiveAssign(distanceMatrix, vehicles);
+  // sendLog('Naive assignment has calculated total driving time of: ' + naiveAssignTotalTime, 'ALGO');
+
   // get the optimized routes by the Hungarian Algorithm
   const optimizedRoutes = munkres(distanceMatrix);
 
   // create an array that each entry contains: vehicle plate number, user id, how long it will take for the vehicle to get to the user
   const optimizedRoutesByIDs = optimizedRoutes.map(route => [vehicles[route[0]].id, users[route[1]].id, distanceMatrix[route[0]][route[1]]]);
 
+  // calculate all the best routes for each user
   let optimizedTotalDrivingTimeToUser = 0;
   optimizedRoutes.forEach(route => optimizedTotalDrivingTimeToUser += parseInt(distanceMatrix[route[0]][route[1]]));
   console.log('TDT(optimized): ' + optimizedTotalDrivingTimeToUser + ' minutes');
@@ -247,6 +253,32 @@ const findUserInArray = (array, userID) => {
   for (let i = 0; i < array.length; i++) {
     if (array[i][1] == userID)
       return array[i];
+  }
+}
+
+const calculateTotalTimeOfNaiveAssign = async (distanceMatrix, vehicles) => {
+  try {
+    // get the total time of all the current vehicles driving towards users
+    const currentTotalTime = await getTotalDrivingTimeToUser();
+
+    // get all the possible vehicles distances for the last user added
+    const lastUserDistances = [];
+    distanceMatrix.forEach(element => lastUserDistances.push(element[element.length - 1]))
+
+    // get all the vehicles distances that have a state of null
+    const vehiclesWithNullStateArray = [];
+    vehicles.forEach((vehicle, index) => {
+      if (!vehicle.state) vehiclesWithNullStateArray.push(lastUserDistances[index]);
+    })
+
+    console.log(vehiclesWithNullStateArray);
+    console.log('currentTotalTime:', currentTotalTime / 60, "min:", Math.min(...vehiclesWithNullStateArray))
+    console.log('naive total driving time:', currentTotalTime / 60 + Math.min(...vehiclesWithNullStateArray));
+
+    return currentTotalTime / 60 + Math.min(...vehiclesWithNullStateArray)
+
+  } catch (e) {
+    console.log(e);
   }
 }
 
@@ -313,6 +345,7 @@ const assignVehicleToUser = async (userOrigin, userDestination, userID) => {
 
   // send destance matrix to hungarian algorithm
   const optimized = await optimizedAssignedVehicles(distanceMatrix, vehicles, users);
+
   // find user assigned vehicle id
   let vehiclePlateNumber;
   for (let i = 0; i < optimized.length; i++) {
@@ -461,9 +494,10 @@ const createDistanceMatrix = async (users, vehicles) => {
 
 
 const getTotalDrivingTimeToUser = async () => {
-  let response = await fetch(`${IP_ADDRESS}/getTotalDrivingTimeToUser`)
+  const response = await fetch(`${IP_ADDRESS}/getTotalDrivingTimeToUser`)
   return await response.json();
 }
+
 const translateCordsToAddress = async (lat, lng) => {
   return await axios
     .get(
