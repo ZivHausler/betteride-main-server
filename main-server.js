@@ -9,6 +9,7 @@ const googleMapsKey = "AIzaSyB9mAs9XA7wtN9RdKMKRig7wlHBfUtjt1g";
 const munkres = require("munkres-js");
 const IP_ADDRESS = "http://10.100.102.233:3001"; // Daniel -> 10.100.102.233 // ZIV-> 10.0.0.40 // https://betteride-main-server-3mmcqmln7a-ew.a.run.app/
 var distance = require('./distanceMatrix/index.js');
+let demoState = 0;
 
 // automation vars
 let isAutomated = false;
@@ -35,7 +36,7 @@ app.get("/api/OrderVehicle", async (req, res) => {
 
   // find the nearest vehicle and assign it to the user
   const assignment = await assignVehicleToUser(userOrigin, userDestination, userID);
-  console.log("orderVehicle new assignmnet = ",assignment);
+  console.log("orderVehicle new assignmnet = ", assignment);
 
   res.send(JSON.stringify(assignment)).status(200);
 });
@@ -45,6 +46,13 @@ app.put('/api/updateFinishedUsersAutomation', async (req, res) => {
   const { userID } = req.query;
   console.log("userID" + userID + " has finished trip")
   automatedActiveUsersIDs.push(userID);
+  res.send("OK").status(200)
+});
+
+app.put('/api/resetDatabase', async (req, res) => {
+  await fetch(`${IP_ADDRESS}/resetDatabase`, {
+    method: "PUT",
+  });
   res.send("OK").status(200)
 });
 
@@ -100,6 +108,43 @@ app.put('/api/setAutomation', async (req, res) => {
   res.status(200).send("isAutomated set to " + isAutomated)
 });
 
+app.put('/api/setAlgorithmExample', async (req, res) => {
+  try {
+    const { state } = req.query;
+    if (state) demoState = state;
+    else { demoState++; }
+
+    const firstOrigin = 'Zichron Ya\'akov';
+    const secondOrigin = 'Derech HaMelacha 4';
+    const thirdOrigin = 'Tirat HaCarmel';
+    const destination = 'Ruppin Academic Center';
+
+    switch (demoState) {
+      case 1:
+        sendLog('Setting up algorithm demo', 'OK');
+        await assignVehicleToUser(firstOrigin, destination, '106239502123201988788')
+        sendLog("First vehicle has been assigned to user at " + firstOrigin, "OK")
+        break;
+      case 2:
+        await assignVehicleToUser(secondOrigin, destination, '106431065342803359216')
+        sendLog("second vehicle has been assigned to user at " + secondOrigin, "OK")
+        break;
+      case 3:
+        await assignVehicleToUser(thirdOrigin, destination, '106431065342803359221')
+        sendLog("third vehicle has been assigned to user at " + thirdOrigin, "OK")
+        break;
+      default:
+        sendLog("reseting demo state to 0", "OK")
+        demoState = 0;
+        break;
+    }
+    res.status(200).send("Algorithm demo success state: " + demoState)
+  }
+  catch (e) {
+    console.log(e)
+    res.status(400).send("Error!")
+  }
+});
 
 // methods
 const initiateMatrix = (vehiclesLength, usersLength) => {
@@ -192,8 +237,8 @@ const optimizedAssignedVehicles = async (distanceMatrix, vehicles, users) => {
 
   let optimizedTotalDrivingTimeToUser = 0;
   optimizedRoutes.forEach(route => optimizedTotalDrivingTimeToUser += parseInt(distanceMatrix[route[0]][route[1]]));
-  console.log('Hungarian algorithm has been activated and calculated total driving time of: ' + optimizedTotalDrivingTimeToUser);
-  sendLog('Hungarian algorithm has been activated and calculated total driving time of: ' + optimizedTotalDrivingTimeToUser, 'OK');
+  console.log('TDT(optimized): ' + optimizedTotalDrivingTimeToUser + ' minutes');
+  sendLog('TDT(optimized): ' + optimizedTotalDrivingTimeToUser + ' minutes', 'ALGO');
 
   return optimizedRoutes;
 };
@@ -249,12 +294,22 @@ const assignVehicleToUser = async (userOrigin, userDestination, userID) => {
   const vehicles = await response.json();
 
   console.log("trying to assign vehicle to user")
-  console.log("users",users)
-  console.log("vehicles",vehicles)
-  
+  console.log("users", users)
+  console.log("vehicles", vehicles)
+
   // get distance matrix by users(destinations) and vehicles(origins)
   const distanceMatrix = await createDistanceMatrix(users, vehicles);
   if (!checkDistanceMatrix(distanceMatrix)) return 0;
+
+  console.log('\n', '\u001b[' + 35 + 'm' + '<<< Computed Distance Matrix >>>' + '\u001b[0m')
+  console.log(distanceMatrix, '\n')
+
+  // print the total driving time
+  if (demoState > 1) {
+    console.log('TDT(naive): ' + (parseInt(distanceMatrix[0][0]) + parseInt(distanceMatrix[2][1])) + " minutes")
+    sendLog('TDT(naive): ' + (parseInt(distanceMatrix[0][0]) + parseInt(distanceMatrix[2][1])) + " minutes", 'ALGO');
+  }
+
 
   // send destance matrix to hungarian algorithm
   const optimized = await optimizedAssignedVehicles(distanceMatrix, vehicles, users);
@@ -421,15 +476,18 @@ const translateCordsToAddress = async (lat, lng) => {
 
 }
 const sendLog = async (text, type) => {
-  await fetch(`${IP_ADDRESS}/postLog`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ text, type, server: "general-server" })
-  });
+  try {
+    await fetch(`${IP_ADDRESS}/postLog`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ text, type, server: "general-server" })
+    });
+  } catch (e) {
+    console.log('\u001b[' + 31 + 'm' + 'Cannot send logs, firebase server offline?' + '\u001b[0m')
+  }
 }
-
 
 
 
@@ -490,7 +548,7 @@ const sendLog = async (text, type) => {
 
 const automationAlgorithm = async () => {
   // const addresses = ['Holon, Israel', '13 Masrik Blvd., Tel Aviv, Israel', '3 Am Veolamo, Jerusalem, Israel', '10 Pinsker, Hadera, Israel', '28 Bialik St., Ramat Gan, Israel', '11 Hayetzira, Or Yehuda ,Israel', '7 Shlomo Rd., Tel Aviv, Israel', '8 Hadassim, Hod Hasharon, Israel', '8 Haalia Harishona, Hadera, Israel', '10 Hazon Zion, Jerusalem, Israel', '23 Moshe Even Ezra, Ashdod, Israel', '50A Herzl St., Bnei Brak, Israel', '11 Gazit, Petah Tikva, Israel', '30 Frenkel Yedidia, Tel Aviv, Israel', '10 Hapisga, Jerusalem, Israel', '53 Hashomrim, Rehovot, Israel', '14 Hamaagal St., Hod Hasharon, Israel', '7 Plotitsky St., Rishon Lezion, Israel', '49 Golomb Eliahu, Tel Aviv, Israel', '29 Hanapach, Haifa, Israel', '21 1057 St., Nazareth, Israel', '34 M. Goshen Blvd., Kiryat Motzkin, Israel', '3 Mordei Hagetaot St., Hadera, Israel']
-  const addresses = ['Holon, Israel', 'Haifa, Israel' , 'Tel Aviv, Israel', 'Jerusalem, Israel','Eilat, Israel','Sderot, Israel','Neve Yam, Israel', 'Atlit, Israel', 'Nahariya Israel', 'Herzliya, Israel', 'Ein Hod, Israel' ,'Kfar Yona, Israel', 'Zikhron Yaakov', 'Hadera, Israel', 'Tirat Karmel, Israel', 'Akko, Israel', 'Rosh Hanikra, Israel', 'Kfar Blum, Israel', 'Kfar Saba, Israel', 'Mizpe Ramon, Israel', 'Rishon Lezion, Israel']
+  const addresses = ['Holon, Israel', 'Haifa, Israel', 'Tel Aviv, Israel', 'Jerusalem, Israel', 'Eilat, Israel', 'Sderot, Israel', 'Neve Yam, Israel', 'Atlit, Israel', 'Nahariya Israel', 'Herzliya, Israel', 'Ein Hod, Israel', 'Kfar Yona, Israel', 'Zikhron Yaakov', 'Hadera, Israel', 'Tirat Karmel, Israel', 'Akko, Israel', 'Rosh Hanikra, Israel', 'Kfar Blum, Israel', 'Kfar Saba, Israel', 'Mizpe Ramon, Israel', 'Rishon Lezion, Israel']
   // const usersIDs = ["106239502123201988788","106431065342803359216","106431065342803359221","106431065342803359233","112665819530754433510"]
   while (isAutomated) {
     let origin, destination, userIDindex = null;
@@ -504,10 +562,10 @@ const automationAlgorithm = async () => {
       // choose userID
       userIDindex = (Math.floor(Math.random() * (automatedActiveUsersIDs.length - 1)))
       console.log("creating automation")
-      console.log("origin",origin)
+      console.log("origin", origin)
       console.log("destination ", destination)
-      console.log("userIndex",userIDindex)
-      console.log("userID",automatedActiveUsersIDs[userIDindex])
+      console.log("userIndex", userIDindex)
+      console.log("userID", automatedActiveUsersIDs[userIDindex])
       // order vehicle
       await assignVehicleToUser(origin, destination, automatedActiveUsersIDs[userIDindex]);
 
@@ -515,10 +573,13 @@ const automationAlgorithm = async () => {
       automatedActiveUsersIDs.splice(userIDindex, 1); // 2nd parameter means remove one item only
 
     }
-    else{
+    else {
       console.log("no available vehicles, waiting for 2 seconds")
       await delay(2000);
     }
   }
 }
+
+
 const delay = ms => new Promise(res => setTimeout(res, ms))
+
