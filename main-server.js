@@ -7,7 +7,7 @@ const axios = require("axios");
 const googleMapsKey = "AIzaSyB9mAs9XA7wtN9RdKMKRig7wlHBfUtjt1g";
 // const distance = require("google-distance-matrix");
 const munkres = require("munkres-js");
-const IP_ADDRESS = "http://10.0.0.40:3001"; // Daniel -> 10.100.102.233 // ZIV-> 10.0.0.40 // https://betteride-main-server-3mmcqmln7a-ew.a.run.app/
+const IP_ADDRESS = "http://10.80.31.88:3001"; // Daniel -> 10.100.102.233 // ZIV-> 10.0.0.40 // Ruppin ->  10.80.31.88 // https://betteride-main-server-3mmcqmln7a-ew.a.run.app/
 var distance = require('./distanceMatrix/index.js');
 let demoState = 0;
 
