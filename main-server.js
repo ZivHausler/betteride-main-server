@@ -9,7 +9,7 @@ const googleMapsKey = "AIzaSyB9mAs9XA7wtN9RdKMKRig7wlHBfUtjt1g";
 const munkres = require("munkres-js");
 const IP_ADDRESS = "http://localhost:3001"; // Daniel -> 10.100.102.233 // ZIV-> 10.0.0.40 // Ruppin ->  10.80.31.88 // https://betteride-main-server-3mmcqmln7a-ew.a.run.app/
 const distance = require('./distanceMatrix/index.js');
-let demoState = 1;
+let demoState = 0;
 const MIN_REASSIGN_THRESHOLD = 5 // minutes
 
 // automation vars
@@ -38,7 +38,9 @@ app.get("/api/OrderVehicle", async (req, res) => {
   // find the nearest vehicle and assign it to the user
   const assignment = await assignVehicleToUser(userOrigin, userDestination, userID);
   console.log("orderVehicle new assignmnet = ", assignment);
-
+  if (result === -1) {
+    return;
+  }
   res.send(JSON.stringify(assignment)).status(200);
 });
 
@@ -187,7 +189,14 @@ const optimizedAssignedVehicles = async (durationMatrix, vehicles, users) => {
 
   // get the optimized routes by the Hungarian Algorithm
   const optimizedRoutes = munkres(durationMatrix);
-
+  console.log(optimizedRoutes);
+  // check if any matching is correct
+  for (let i = 0; i < optimizedRoutes.length; i++) {
+    if (durationMatrix[optimizedRoutes[i][0]][optimizedRoutes[i][1]] >= '9007199254740990') {
+      console.log(`Couldn't find a mach to the last order`);
+      return [null, null];
+    }
+  }
   // create an array that each entry contains: vehicle plate number, user id, how long it will take for the vehicle to get to the user
   // const optimizedRoutesByIDs = optimizedRoutes.map(route => [vehicles[route[0]].id, users[route[1]].id, durationMatrix[route[0]][route[1]]]);
 
@@ -197,6 +206,7 @@ const optimizedAssignedVehicles = async (durationMatrix, vehicles, users) => {
   sendLog('TDT(optimized): ' + optimizedTotalDrivingTimeToUser + ' minutes', 'ALGO');
   return [(optimizedTotalDrivingTimeToUser + MIN_REASSIGN_THRESHOLD) < parseInt(totalNaiveDrivingTime) ? optimizedRoutes : vehiclePlateNumber, (optimizedTotalDrivingTimeToUser + MIN_REASSIGN_THRESHOLD) < parseInt(totalNaiveDrivingTime)]
 };
+
 const findUserInArray = (array, userID) => {
   for (let i = 0; i < array.length; i++) {
     if (array[i][1] == userID)
@@ -228,7 +238,7 @@ const calculateTotalTimeOfNaiveAssign = async (durationMatrix, vehicles) => {
 const reassignVehicles = async (matches, vehicles, users) => {
   // for each match, create google directions api call to get the route (need origin and destination for each user)
   const promises = matches.map(match => {
-    console.log('vehicle number', vehicles[match[0]].id, 'from:', vehicles[match[0]].currentLocation, 'to:', users[match[1]].currentLocation);
+    // console.log('vehicle number', vehicles[match[0]].id, 'from:', vehicles[match[0]].currentLocation, 'to:', users[match[1]].currentLocation);
     findRouteAndPushToVehicle(vehicles[match[0]].currentLocation, users[match[1]].currentLocation, vehicles[match[0]].id, users[match[1]].id);
   });
 }
@@ -275,13 +285,14 @@ const assignVehicleToUser = async (userOrigin, userDestination, userID) => {
   if (!checkDurationMatrix(durationMatrix)) return 0;
 
   console.log('\n', '\u001b[' + 35 + 'm' + '<<< Computed Duration Matrix >>>' + '\u001b[0m')
-  console.log(durationMatrix, '\n')
+  console.log(durationMatrix);
   console.log('\n', '\u001b[' + 35 + 'm' + '<<< Computed Distance Matrix >>>' + '\u001b[0m')
-  console.log(distanceMatrix, '\n')
+  console.log(distanceMatrix);
 
   durationMatrix = await checkVehicleRestrictions(distanceMatrix, durationMatrix, vehicles, users);
   // send destance matrix to hungarian algorithm
   const [optimized, isOptimize] = await optimizedAssignedVehicles(durationMatrix, vehicles, users);
+  if (!optimized) return -1;
   // update user state, adding origin, destantion
   if (!isOptimize) { // if there isn't route optimization, optimized = naaiveAssginmnetVehicle ID
     sendLog(`Hungarian algorithm didn't improve (TRESHOLD:${MIN_REASSIGN_THRESHOLD}min)`, 'ALGO');
@@ -318,8 +329,6 @@ const assignVehicleToUser = async (userOrigin, userDestination, userID) => {
     // reassign all vehicles available according to the optimized array of matches
     reassignVehicles(optimized, vehicles, users);
   }
-
-
   // return to the user the vehicle 
   return 1;
 
@@ -406,15 +415,11 @@ const checkDurationMatrix = (matrix) => {
   return true;
 }
 const createMatrixes = async (users, vehicles) => {
-  console.log(users)
-  console.log(users)
-  console.log(users)
-  console.log(users)
   const origins = vehicles.map(vehicle => vehicle.currentLocation)
   const destinations = users.map(user => user.currentLocation);
   const durationMatrix = initiateMatrix(destinations.length, origins.length);
   const distanceMatrix = initiateMatrix(destinations.length, origins.length);
-  console.log('origin : ' + origins, "destination: " + destinations)
+  // console.log('origin : ' + origins, "destination: " + destinations)
   distance.key('AIzaSyAEDK9co1lmhgQ2yyb6C0iko4HE7sXaK38');
   const google_matrix = await distance.matrix(origins, destinations, (err, distances) => { console.log('') });
   // console.log('distance_matrix:', google_matrix.rows);
@@ -489,7 +494,7 @@ const automationAlgorithm = async () => {
       console.log("userIndex", userIDindex)
       console.log("userID", automatedActiveUsersIDs[userIDindex])
       // order vehicle
-      await assignVehicleToUser(origin, destination, automatedActiveUsersIDs[userIDindex]);
+      const result = await assignVehicleToUser(origin, destination, automatedActiveUsersIDs[userIDindex]);
 
       // remove userID from list
       automatedActiveUsersIDs.splice(userIDindex, 1); // 2nd parameter means remove one item only
@@ -504,15 +509,24 @@ const automationAlgorithm = async () => {
 const delay = ms => new Promise(res => setTimeout(res, ms))
 
 const checkVehicleRestrictions = async (distanceMatrix, durationMatrix, vehicles, users) => {
-  console.log("-----------------checkVehicleRestrictions-----------------------")
-  console.log('distanceMatrix', distanceMatrix)
-  // console.log('durationMatrix', durationMatrix)
-  console.log('vehicles', vehicles)
-  console.log('users', users)
+  console.log("-----------------checkVehicleRestrictions-----------------------");
+  // console.log('distanceMatrix before', distanceMatrix);
 
   // foreach user, api call (route) to get the distance of the trip
-
-  return durationMatrix
+  for (let i = 0; i < users.length; i++) {
+    const result = await getDirectionsByAddress(users[i].currentLocation, users[i].userDestination) // result.distance.value
+    console.log(result.distance.value);
+    distanceMatrix.map((distance, index) => {
+      if (distance[i] + result.distance.value > vehicles[index].currentBattery) {
+        durationMatrix[index][i] = '9007199254740990';
+        return distance[i] = '9007199254740990';
+      }
+      return distance[i];
+    });
+  }
+  // console.log('distanceMAtrix after', distanceMatrix)
+  console.log('durationMatrix', durationMatrix);
+  return durationMatrix;
 }
 
 // const createCostMatrix = async () => {
