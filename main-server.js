@@ -189,7 +189,8 @@ const optimizedAssignedVehicles = async (durationMatrix, vehicles, users) => {
 
   // get the optimized routes by the Hungarian Algorithm
   const optimizedRoutes = munkres(durationMatrix);
-  console.log(optimizedRoutes);
+  console.log("optimizedRoutes:", optimizedRoutes);
+
   // check if any matching is correct
   for (let i = 0; i < optimizedRoutes.length; i++) {
     if (durationMatrix[optimizedRoutes[i][0]][optimizedRoutes[i][1]] >= '9007199254740990') {
@@ -214,6 +215,7 @@ const findUserInArray = (array, userID) => {
   }
 }
 const calculateTotalTimeOfNaiveAssign = async (durationMatrix, vehicles) => {
+  console.log('----------@@@@@----------', vehicles);
   try {
     // get the total time of all the current vehicles driving towards users
     const currentTotalTime = await getTotalDrivingTimeToUser();
@@ -224,10 +226,10 @@ const calculateTotalTimeOfNaiveAssign = async (durationMatrix, vehicles) => {
 
     // get all the vehicles distances that have a state of null
     const vehiclesWithNullStateArray = [];
-    vehicles.forEach((vehicle, index) => {
+    vehicles?.forEach((vehicle, index) => {
       if (!vehicle.state) vehiclesWithNullStateArray.push({ duration: parseInt(lastUserDistances[index]), id: vehicle.id });
     })
-    const naiveAssignVehicle = vehiclesWithNullStateArray.reduce((prev, curr) => {
+    const naiveAssignVehicle = vehiclesWithNullStateArray?.reduce((prev, curr) => {
       return prev.duration < curr.duration ? prev : curr;
     })
     return { totalNaiveDrivingTime: currentTotalTime / 60 + naiveAssignVehicle.duration, vehiclePlateNumber: naiveAssignVehicle.id }
@@ -247,6 +249,7 @@ const findRouteAndPushToVehicle = async (origin, destination, vehicleID, userID)
   route['user_id'] = userID;
   // push to the vehicle via firebase server
   // send firebase each response to reassign vehicle's trip
+
   await fetch(`${IP_ADDRESS}/pushRouteToVehicle`, {
     method: "POST",
     headers: {
@@ -271,14 +274,14 @@ const assignVehicleToUser = async (userOrigin, userDestination, userID) => {
 
   // get vehicles(available) and users (waiting for their vehicle to arrive) data
   let response = await fetch(`${IP_ADDRESS}/getAllUsersWaitingForARide`);
-  const users = await response.json();
+  let users = await response.json();
+  users = users.filter(user => user?.assignments < 2);
   users.push({ "id": userID, "currentLocation": userOrigin, userDestination })
   response = await fetch(`${IP_ADDRESS}/getVehiclesTowardsUsers`);
   const vehicles = await response.json();
-
-  // console.log("trying to assign vehicle to user")
-  // console.log("users", users)
-  // console.log("vehicles", vehicles)
+  console.log('vehicles', vehicles.length);
+  console.log('users', users.length);
+  if (users.length > vehicles.length) return -1;
 
   // get distance matrix by users(destinations) and vehicles(origins)
   let { durationMatrix, distanceMatrix } = await createMatrixes(users, vehicles);
@@ -289,7 +292,7 @@ const assignVehicleToUser = async (userOrigin, userDestination, userID) => {
   console.log('\n', '\u001b[' + 35 + 'm' + '<<< Computed Distance Matrix >>>' + '\u001b[0m')
   console.log(distanceMatrix);
 
-  durationMatrix = await checkVehicleRestrictions(distanceMatrix, durationMatrix, vehicles, users);
+  durationMatrix = await checkRestrictions(distanceMatrix, durationMatrix, vehicles, users);
   // send destance matrix to hungarian algorithm
   const [optimized, isOptimize] = await optimizedAssignedVehicles(durationMatrix, vehicles, users);
   if (!optimized) return -1;
@@ -308,9 +311,9 @@ const assignVehicleToUser = async (userOrigin, userDestination, userID) => {
       },
       body: JSON.stringify({ userID, userOrigin, userDestination, vehiclePlateNumber: optimized })
     });
-
     await findRouteAndPushToVehicle(vehicleOrigin, userOrigin, optimized, userID);
   }
+
   else {
     let vehiclePlateNumber;
     for (let i = 0; i < optimized.length; i++) {
@@ -332,77 +335,6 @@ const assignVehicleToUser = async (userOrigin, userDestination, userID) => {
   // return to the user the vehicle 
   return 1;
 
-  // if (unoptimizedTotalDrivingTimeToUser > optimizedTotalDrivingTimeToUser) {
-  //   await fetch(`${IP_ADDRESS}/reassignVehiclesToUsers`, {
-  //     method: "PUT",
-  //     headers: {
-  //       "Content-Type": "application/json",
-  //     },
-  //     body: JSON.stringify(optimizedRoutes),
-  //   })
-  // }
-
-
-  // calc which is the nearest (by time!) by sending both arrays to google matrix
-
-
-
-  // assign selected  vehicle to user
-
-
-  // const userRoute = await getDirectionsByAddress(userOrigin, userDestination);
-  // const userOriginCoordinates = userRoute.start_location;
-  // const vehiclesResponse = await fetch(`${IP_ADDRESS}/getVehicles`);
-  // const vehicles = await vehiclesResponse.json();
-  // let nearestVehicles = {};
-
-  // // loop through all vehicles and output n nearest vehicles
-  // for (const [key, value] of Object.entries(vehicles)) {
-  //   let dist = Math.sqrt(Math.pow(userOriginCoordinates.lat - value.currentLocation.location.lat, 2) + Math.pow(userOriginCoordinates.lng - value.currentLocation.location.lng, 2));
-  //   if (Object.keys(nearestVehicles).length < 3) {
-  //     // the vehicle is available
-  //     if (!value?.routeToUser && !value?.routeWithUser) {
-  //       nearestVehicles[dist] = value;
-  //     }
-  //   } else nearestVehicles = replaceMaxKey(nearestVehicles, value, dist);
-  // }
-  // if (Object.keys(nearestVehicles).length <= 0) {
-  //   console.log("there are no available cars for the ride");
-  //   return -1;
-  // }
-  // // replace distance with estimated arrival time
-  // nearestVehicles = await replaceDistWithETA(nearestVehicles,userOriginCoordinates);
-  // // the row commented below, checks if there is a better vehicle, which its ride ends near the user origin.
-  // // nearestVehicles = await calculateUnavailableCars(vehicles, nearestVehicles, userOriginCoordinates);
-
-  // // sort the vehicles and return array from min to max
-  // const sortedNearestVehicles = sortedVehicleArray(nearestVehicles);
-  // // push route into the avialable vehicle
-
-  // // if (!sortedNearestVehicles[0][1]){
-  // //   console.log()
-  // // }
-
-  // // add to the desired vehicle the route to user destination from user origin
-  // // sortedNearestVehicles[0][1].routeToUser.routes[0].legs[0]['trip_type'] = 'to_user';
-  // sortedNearestVehicles[0][1].routeToUser['user_id'] = userID;
-
-
-  // await fetch(`${IP_ADDRESS}/pushRouteToVehicle`, {
-  //   method: "POST",
-  //   headers: {
-  //     "Content-Type": "application/json",
-  //   },
-  //   body: JSON.stringify({ plateNumber: sortedNearestVehicles[0][1].vehicle.plateNumber, route: sortedNearestVehicles[0][1].routeToUser, type: "TOWARDS_USER" })
-  // });
-  // await fetch(`${IP_ADDRESS}/pushTripLocationsToUser`, {
-  //   method: "POST",
-  //   headers: {
-  //     "Content-Type": "application/json",
-  //   },
-  //   body: JSON.stringify({ userID, userOrigin, userDestination, vehiclePlateNumber: sortedNearestVehicles[0][1].vehicle.plateNumber })
-  // });
-  // return sortedNearestVehicles[0][1].vehicle.plateNumber;
 };
 const checkDurationMatrix = (matrix) => {
   for (let i = 0; i < matrix.length; i++) {
@@ -495,90 +427,36 @@ const automationAlgorithm = async () => {
       console.log("userID", automatedActiveUsersIDs[userIDindex])
       // order vehicle
       const result = await assignVehicleToUser(origin, destination, automatedActiveUsersIDs[userIDindex]);
-
+      if (result === -1) {
+        await delay(2000);
+        continue;
+      }
       // remove userID from list
       automatedActiveUsersIDs.splice(userIDindex, 1); // 2nd parameter means remove one item only
 
     }
     else {
-      console.log("no available vehicles, waiting for 2 seconds")
+      console.log("no available vehicles, waiting another 2 seconds")
       await delay(2000);
     }
   }
 }
 const delay = ms => new Promise(res => setTimeout(res, ms))
 
-const checkVehicleRestrictions = async (distanceMatrix, durationMatrix, vehicles, users) => {
-  console.log("-----------------checkVehicleRestrictions-----------------------");
+const checkRestrictions = async (distanceMatrix, durationMatrix, vehicles, users) => {
+  console.log("-----------------checkRestrictions-----------------------");
   // console.log('distanceMatrix before', distanceMatrix);
-
   // foreach user, api call (route) to get the distance of the trip
   for (let i = 0; i < users.length; i++) {
+    // go throught the users and check if any of them has already been reassigned
     const result = await getDirectionsByAddress(users[i].currentLocation, users[i].userDestination) // result.distance.value
-    console.log(result.distance.value);
     distanceMatrix.map((distance, index) => {
-      if (distance[i] + result.distance.value > vehicles[index].currentBattery) {
+      if (distance[i] + result.distance.value > vehicles[index]?.currentBattery) {
         durationMatrix[index][i] = '9007199254740990';
         return distance[i] = '9007199254740990';
       }
       return distance[i];
     });
   }
-  // console.log('distanceMAtrix after', distanceMatrix)
-  console.log('durationMatrix', durationMatrix);
   return durationMatrix;
 }
-
-// const createCostMatrix = async () => {
-//   const response = await fetch(`${IP_ADDRESS}/getVehiclesTowardsUsers`);
-//   const responseData = await response.json();
-//   console.log(responseData);
-//   if (responseData.length <= 0) return;
-//   const origins = [];
-//   const destinations = [];
-//   const vehiclesIDs = [];
-//   const usersIDs = [];
-
-//   distance.key('AIzaSyAYOZJcrH22i5ePgb4ctAUPsQw9oU69MwU');
-
-//   let count = 0;
-//   let mishtatfimMatrix = [];
-//   responseData.forEach((vehicle) => {
-//     origins.push(vehicle.currentLocation?.location?.lat + "," + vehicle.currentLocation.location.lng);
-//     destinations.push(vehicle.route.end_location.lat + "," + vehicle.route.end_location.lng);
-//     vehiclesIDs.push(vehicle.plateNumber);
-//     usersIDs.push(count++);
-//   });
-//   if (usersIDs.length <= 1) {
-//     //console.log("not enough vehicles to optimize")
-//     return;
-//   }
-
-//   distance.matrix(origins, destinations, (err, distances) => {
-//     const distanceMatrix = initiateMatrix(vehiclesIDs.length, usersIDs.length);
-//     if (err) {
-//       return console.log(err);
-//     }
-//     if (!distances) {
-//       return console.log("no distances");
-//     }
-//     if (distances.status == "OK") {
-//       mishtatfimMatrix = initiateMatrix(
-//         vehiclesIDs.length,
-//         usersIDs.length
-//       );
-//       for (let i = 0; i < origins.length; i++) {
-//         for (let j = 0; j < destinations.length; j++) {
-//           if (distances.rows[0].elements[j].status == "OK") {
-//             distanceMatrix[i][j] = (distances.rows[i].elements[j].duration.value / 60).toFixed(2);
-//             mishtatfimMatrix[i][j] = 'vehicle plate number: ' + vehiclesIDs[i] + " to location: " + destinations[j] + " will last: " + (distances.rows[i].elements[j].duration.value / 60).toFixed(2) + ' minutes';
-//           }
-//           else console.log("destination is not reachable from origin");
-//         }
-//       }
-//     }
-//     optimizedAssignedVehicles(distanceMatrix, vehiclesIDs, usersIDs, destinations, mishtatfimMatrix);
-//     // return distanceMatrix;
-//   });
-// };
-
