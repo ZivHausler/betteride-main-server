@@ -33,12 +33,13 @@ app.get('/api/translateCordsToAddress', async (req, res) => {
   res.status(200).send(JSON.stringify(await translateCordsToAddress(lat, lng)));
 })
 app.get("/api/OrderVehicle", async (req, res) => {
+  console.log('inside orderveihlce');
   const { userOrigin, userDestination, userID } = req.query;
 
   // find the nearest vehicle and assign it to the user
   const assignment = await assignVehicleToUser(userOrigin, userDestination, userID);
   console.log("orderVehicle new assignmnet = ", assignment);
-  if (result === -1) {
+  if (assignment === -1) {
     return;
   }
   res.send(JSON.stringify(assignment)).status(200);
@@ -215,7 +216,6 @@ const findUserInArray = (array, userID) => {
   }
 }
 const calculateTotalTimeOfNaiveAssign = async (durationMatrix, vehicles) => {
-  console.log('----------@@@@@----------', vehicles);
   try {
     // get the total time of all the current vehicles driving towards users
     const currentTotalTime = await getTotalDrivingTimeToUser();
@@ -239,12 +239,13 @@ const calculateTotalTimeOfNaiveAssign = async (durationMatrix, vehicles) => {
 }
 const reassignVehicles = async (matches, vehicles, users) => {
   // for each match, create google directions api call to get the route (need origin and destination for each user)
+  console.log("reassignVehicles: users", users, matches);
   const promises = matches.map(match => {
-    // console.log('vehicle number', vehicles[match[0]].id, 'from:', vehicles[match[0]].currentLocation, 'to:', users[match[1]].currentLocation);
-    findRouteAndPushToVehicle(vehicles[match[0]].currentLocation, users[match[1]].currentLocation, vehicles[match[0]].id, users[match[1]].id);
+    findRouteAndPushToVehicle(vehicles[match[0]].currentLocation, users[match[1]].currentLocation, vehicles[match[0]].id, users[match[1]].id, users[match[1]].assignments > 0);
   });
 }
-const findRouteAndPushToVehicle = async (origin, destination, vehicleID, userID) => {
+
+const findRouteAndPushToVehicle = async (origin, destination, vehicleID, userID, isReassigned) => {
   const route = await getDirectionsByAddress(origin, destination);
   route['user_id'] = userID;
   // push to the vehicle via firebase server
@@ -257,12 +258,13 @@ const findRouteAndPushToVehicle = async (origin, destination, vehicleID, userID)
     },
     body: JSON.stringify({ plateNumber: vehicleID, route, type: 'TOWARDS_USER' })
   });
+
   await fetch(`${IP_ADDRESS}/rematchVehiclesAndUsers`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ vehicleID, userID })
+    body: JSON.stringify({ vehicleID, userID, isReassigned })
   });
 
 }
@@ -271,6 +273,7 @@ const findRouteAndPushToVehicle = async (origin, destination, vehicleID, userID)
 // @param userDestination
 // the method recives user origin and destination, calc its route and returns the assigned vehicle
 const assignVehicleToUser = async (userOrigin, userDestination, userID) => {
+  let vehiclePlateNumber;
 
   // get vehicles(available) and users (waiting for their vehicle to arrive) data
   let response = await fetch(`${IP_ADDRESS}/getAllUsersWaitingForARide`);
@@ -304,18 +307,17 @@ const assignVehicleToUser = async (userOrigin, userDestination, userID) => {
       if (vehicles[i].id == optimized)
         vehicleOrigin = vehicles[i].currentLocation
     }
+    vehiclePlateNumber = optimized;
     await fetch(`${IP_ADDRESS}/pushTripLocationsToUser`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ userID, userOrigin, userDestination, vehiclePlateNumber: optimized })
+      body: JSON.stringify({ userID, userOrigin, userDestination, vehiclePlateNumber })
     });
     await findRouteAndPushToVehicle(vehicleOrigin, userOrigin, optimized, userID);
   }
-
   else {
-    let vehiclePlateNumber;
     for (let i = 0; i < optimized.length; i++) {
       if (optimized[i][1] == users.length - 1) {
         vehiclePlateNumber = vehicles[optimized[i][0]].id
@@ -332,10 +334,10 @@ const assignVehicleToUser = async (userOrigin, userDestination, userID) => {
     // reassign all vehicles available according to the optimized array of matches
     reassignVehicles(optimized, vehicles, users);
   }
-  // return to the user the vehicle 
-  return 1;
-
+  // return the vehicle plate number
+  return vehiclePlateNumber;
 };
+
 const checkDurationMatrix = (matrix) => {
   for (let i = 0; i < matrix.length; i++) {
     if (matrix[i][0] == "NaN") {
