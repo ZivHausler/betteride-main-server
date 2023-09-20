@@ -12,3 +12,5 @@ The Betteride server uses the Hungarian algorithm to ensure that users are match
 ![Example Image](images/1.png)
 <br>
 ![Example Image](images/2.png)
+<br>
+![Example Image](images/3.png)
